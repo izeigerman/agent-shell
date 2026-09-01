@@ -29,9 +29,9 @@
 (require 'comint)
 (require 'map)
 (require 'seq)
-(require 'subr-x)
 (require 'agent-shell-project)
 
+(declare-function agent-shell--live-input-prompt-p "agent-shell")
 (declare-function agent-shell--shell-buffer "agent-shell")
 (declare-function agent-shell--project-files "agent-shell-project")
 
@@ -57,8 +57,9 @@ the word, nil otherwise."
 
 (defun agent-shell-completion--input-start ()
   "Return the position where the prompt input being composed begins.
-Handles the shell's comint prompt, the viewport's compose buffer and the
-minibuffer reading a queued prompt.  Falls back to `point-min'.
+Handles the shell's live comint prompt, the viewport's compose buffer
+and the minibuffer reading a queued prompt.  Falls back to `point-min',
+which includes a stale prompt with agent output streaming below it.
 
 With `Claude> summarize' ending the shell buffer and `summarize'
 spanning 30 to 39, returns 30."
@@ -69,6 +70,7 @@ spanning 30 to 39, returns 30."
     (point-min))
    ((and (derived-mode-p 'comint-mode)
          comint-last-prompt
+         (agent-shell--live-input-prompt-p comint-last-prompt)
          (>= (point) (cdr comint-last-prompt)))
     (marker-position (cdr comint-last-prompt)))
    (t
@@ -76,14 +78,13 @@ spanning 30 to 39, returns 30."
 
 (defun agent-shell-completion--command-start-p (position)
   "Non-nil when POSITION is where a slash command can start.
-Agents only recognize a slash command as the first thing in a message,
-so only whitespace may precede POSITION in the input being composed.
+Agents only recognize a slash command as the very first character of a
+message, so nothing at all may precede POSITION in the input being
+composed.
 
 With `Claude> summarize ' ending the shell buffer and the input spanning
-30 to 40, returns nil for POSITION 40 and non-nil for POSITION 30."
-  (string-blank-p (buffer-substring-no-properties
-                   (min (agent-shell-completion--input-start) position)
-                   position)))
+30 to 40, returns non-nil for POSITION 30 and nil for POSITION 40."
+  (= position (agent-shell-completion--input-start)))
 
 (defun agent-shell--capf-exit-with-space (_string _status)
   "Insert space after completion."

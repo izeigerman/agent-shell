@@ -3,6 +3,7 @@
 (require 'comint)
 (require 'ert)
 (require 'map)
+(require 'agent-shell)
 (require 'agent-shell-completion)
 
 ;;; Code:
@@ -40,22 +41,23 @@
     shell))
 
 (ert-deftest agent-shell-completion-command-at-input-start-test ()
-  "Commands complete at the start of the input, ignoring leading whitespace."
+  "Commands complete when / is the first character of the input."
   (let ((shell (agent-shell-completion-tests--make-shell)))
     (unwind-protect
-        (dolist (input '("/he" "  /he"))
-          (with-temp-buffer
-            (setq-local agent-shell-completion--shell-buffer shell)
-            (insert input)
-            (should (equal (nth 2 (agent-shell--command-completion-at-point))
-                           '("help" "compact")))))
+        (with-temp-buffer
+          (setq-local agent-shell-completion--shell-buffer shell)
+          (insert "/he")
+          (should (equal (nth 2 (agent-shell--command-completion-at-point))
+                         '("help" "compact"))))
       (kill-buffer shell))))
 
 (ert-deftest agent-shell-completion-command-mid-input-test ()
-  "Agents only recognize commands starting a message, so / mid-input is text."
+  "Agents only recognize a command as a message's very first character.
+Anything ahead of the /, including whitespace and earlier lines of a
+multi-line prompt, makes it plain text."
   (let ((shell (agent-shell-completion-tests--make-shell)))
     (unwind-protect
-        (dolist (input '("summarize /he" "summarize\n/he"))
+        (dolist (input '("  /he" "summarize /he" "summarize\n/he"))
           (with-temp-buffer
             (setq-local agent-shell-completion--shell-buffer shell)
             (insert input)
@@ -76,6 +78,24 @@
           (should (equal (nth 2 (agent-shell--command-completion-at-point))
                          '("help" "compact")))
           (insert " now what /he")
+          (should-not (agent-shell--command-completion-at-point)))
+      (kill-buffer shell))))
+
+(ert-deftest agent-shell-completion-command-below-stale-prompt-test ()
+  "A prompt with agent output below it is stale, not an input area.
+`comint-last-prompt' still points at it while output streams, so its end
+is where output begins rather than where typing begins."
+  (let ((shell (agent-shell-completion-tests--make-shell)))
+    (unwind-protect
+        (with-temp-buffer
+          (comint-mode)
+          (setq-local agent-shell-completion--shell-buffer shell)
+          (insert "Fake> ")
+          (setq-local comint-last-prompt (cons (copy-marker (- (point) 6))
+                                               (copy-marker (point))))
+          (save-excursion
+            (insert (propertize "Thinking..." 'field 'output)))
+          (insert "/he")
           (should-not (agent-shell--command-completion-at-point)))
       (kill-buffer shell))))
 
