@@ -61,8 +61,9 @@ Handles the shell's live comint prompt, the viewport's compose buffer
 and the minibuffer reading a queued prompt.  Falls back to `point-min',
 which includes a stale prompt with agent output streaming below it.
 
-With `Claude> summarize' ending the shell buffer and `summarize'
-spanning 30 to 39, returns 30."
+With the shell buffer ending in `Claude> summarize', where the prompt
+`Claude> ' ends at position 30 and the typed `summarize' occupies 30 to
+39, returns 30."
   (cond
    ((minibufferp)
     (minibuffer-prompt-end))
@@ -77,13 +78,15 @@ spanning 30 to 39, returns 30."
     (point-min))))
 
 (defun agent-shell-completion--command-start-p (position)
-  "Non-nil when POSITION is where a slash command can start.
+  "Non-nil when a / typed at POSITION starts a slash command.
 Agents only recognize a slash command as the very first character of a
 message, so nothing at all may precede POSITION in the input being
 composed.
 
-With `Claude> summarize ' ending the shell buffer and the input spanning
-30 to 40, returns non-nil for POSITION 30 and nil for POSITION 40."
+With the shell buffer ending in `Claude> summarize ', where the typed
+input occupies 30 to 40: a / typed right after the prompt (POSITION 30)
+returns non-nil, while one typed after `summarize ' (POSITION 40)
+returns nil."
   (= position (agent-shell-completion--input-start)))
 
 (defun agent-shell--capf-exit-with-space (_string _status)
