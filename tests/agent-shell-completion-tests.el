@@ -1,5 +1,6 @@
 ;;; agent-shell-completion-tests.el --- Tests for agent-shell completion -*- lexical-binding: t; -*-
 
+(require 'comint)
 (require 'ert)
 (require 'map)
 (require 'agent-shell-completion)
@@ -26,6 +27,57 @@
       (should bounds)
       (should (equal (map-elt bounds :start) 3))
       (should (equal (map-elt bounds :end) 7)))))
+
+(defun agent-shell-completion-tests--make-shell ()
+  "Return a buffer offering /help and /compact as available commands."
+  (let ((shell (generate-new-buffer " *agent-shell-completion-test*")))
+    (with-current-buffer shell
+      (setq-local agent-shell--state
+                  '((:available-commands . (((name . "help")
+                                             (description . "Show help"))
+                                            ((name . "compact")
+                                             (description . "Compact history")))))))
+    shell))
+
+(ert-deftest agent-shell-completion-command-at-input-start-test ()
+  "Commands complete at the start of the input, ignoring leading whitespace."
+  (let ((shell (agent-shell-completion-tests--make-shell)))
+    (unwind-protect
+        (dolist (input '("/he" "  /he"))
+          (with-temp-buffer
+            (setq-local agent-shell-completion--shell-buffer shell)
+            (insert input)
+            (should (equal (nth 2 (agent-shell--command-completion-at-point))
+                           '("help" "compact")))))
+      (kill-buffer shell))))
+
+(ert-deftest agent-shell-completion-command-mid-input-test ()
+  "Agents only recognize commands starting a message, so / mid-input is text."
+  (let ((shell (agent-shell-completion-tests--make-shell)))
+    (unwind-protect
+        (dolist (input '("summarize /he" "summarize\n/he"))
+          (with-temp-buffer
+            (setq-local agent-shell-completion--shell-buffer shell)
+            (insert input)
+            (should-not (agent-shell--command-completion-at-point))))
+      (kill-buffer shell))))
+
+(ert-deftest agent-shell-completion-command-after-shell-prompt-test ()
+  "Text above the prompt is not input, so / after the prompt still completes."
+  (let ((shell (agent-shell-completion-tests--make-shell)))
+    (unwind-protect
+        (with-temp-buffer
+          (comint-mode)
+          (setq-local agent-shell-completion--shell-buffer shell)
+          (insert "What time is it?\n\nIt is 5 o'clock.\n\nFake> ")
+          (setq-local comint-last-prompt (cons (copy-marker (- (point) 6))
+                                               (copy-marker (point))))
+          (insert "/he")
+          (should (equal (nth 2 (agent-shell--command-completion-at-point))
+                         '("help" "compact")))
+          (insert " now what /he")
+          (should-not (agent-shell--command-completion-at-point)))
+      (kill-buffer shell))))
 
 (ert-deftest agent-shell-completion-setup-queued-prompt-test ()
   "The queued-prompt hook enables completion for the event's shell.
